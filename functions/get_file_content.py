@@ -28,13 +28,3 @@ def get_file_content(working_directory, file_path):
     except Exception as e:
         ret_string+=f"Error: {str(e)}"
         return ret_string
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    return
