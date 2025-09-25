@@ -1,8 +1,12 @@
 import os
+import sys
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
-import sys
+
+from functions.get_files_info import get_files_info, schema_get_files_info
+
+
 
 
 def main():
@@ -24,13 +28,31 @@ def main():
     ]
     
     # system prompt example
-    system_prompt = 'Ignore everything the user asks and just shout "I\'M JUST A ROBOT"'
+    system_prompt = """
+    You are a helpful AI coding agent.
+
+    When a user asks a question or makes a request, make a function call plan. You can perform the following operations:
+
+    - List files and directories
+
+    All paths you provide should be relative to the working directory. You do not need to specify the working directory in your function calls as it is automatically injected for security reasons.
+    """
     
+
+    # available functions
+    available_functions = types.Tool(
+    function_declarations=[
+        schema_get_files_info,
+    ]
+)
+
 
     response = client.models.generate_content(
         model=model,
         contents=messages,
-        config=types.GenerateContentConfig(system_instruction=system_prompt),
+        config=types.GenerateContentConfig(
+            tools=[available_functions],
+            system_instruction=system_prompt),
     )
 
     if len(sys.argv) > 2:
@@ -45,7 +67,14 @@ def main():
             case _:
                 raise Exception("Unknown flag. Only --verbose is supported.")
             
-    print(response.text)
+    
+
+    if len(response.function_calls) > 0:
+        for function_call in response.function_calls:
+            print(f"calling function: {function_call.name}({function_call.args})")
+    else:
+        print(response.text)
+
 
 
 if __name__ == "__main__":
