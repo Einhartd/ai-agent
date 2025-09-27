@@ -51,20 +51,12 @@ def get_system_prompt():
     All paths you provide should be relative to the working directory. You do not need to specify the working directory in your function calls as it is automatically injected for security reasons.
     """
 
-def handle_function_calls(response, verbose_flag):
-    for function_call in response.function_calls:
-        function_response = call_function(function_call, verbose=verbose_flag)
-        
-        if not function_response.parts or not function_response.parts[0].function_response:
-            raise Exception("empty function call result")
-        
-        if verbose_flag:
-            print(f"-> {function_response.parts[0].function_response.response}")
-
 def main():
+    # parse arguments and get prompt
     prompt, verbose_flag = parse_arguments()
+    # create the client
     client = create_client()
-    
+    # initial message list
     messages = [types.Content(role="user", parts=[types.Part(text=prompt)])]
 
     # available functions
@@ -76,24 +68,42 @@ def main():
         schema_run_python_file,
     ])
     
-    response = client.models.generate_content(
-        model="gemini-2.0-flash-001",
-        contents=messages,
-        config=types.GenerateContentConfig(
-            tools=[available_functions], 
-            system_instruction=get_system_prompt()
-        ),
-    )
+    for i in range(20):
+        try:
+            response = client.models.generate_content(
+                model="gemini-2.0-flash-001",
+                contents=messages,
+                config=types.GenerateContentConfig(
+                    tools=[available_functions], 
+                    system_instruction=get_system_prompt()
+                ),
+            )
+
+            for cand in response.candidates:
+                messages.append(cand.content)
+
+            if response.function_calls:
+                for fc in response.function_calls:
+                    if verbose_flag:
+                        print(f"- Calling function: {fc.name}")
+                    tool_msg = call_function(fc, verbose=verbose_flag)
+                    messages.append(tool_msg)
+                continue
+
+            if verbose_flag:
+                print(f"User prompt: {prompt}")
+                print(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
+                print(f"Response tokens: {response.usage_metadata.candidates_token_count}")
+
+            if response.text:
+                print("Final response:\n" + response.text)
+                break
+        
+        except Exception as e:
+            print(f"Error during model generation: {e}")
+            return
     
-    if verbose_flag:
-        print(f"User prompt: {prompt}")
-        print(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
-        print(f"Response tokens: {response.usage_metadata.candidates_token_count}")
-    
-    if response.function_calls:
-        handle_function_calls(response, verbose_flag)
-    else:
-        print(response.text)
+
 
 if __name__ == "__main__":
     main()
